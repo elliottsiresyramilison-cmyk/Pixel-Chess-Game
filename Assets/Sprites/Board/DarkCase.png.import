@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dgi3ppi0g842i"
-path="res://.godot/imported/LightCase.png-9618f1bcd9acac692f9d5b306e728a61.ctex"
+uid="uid://cvqfoi8j3ob0c"
+path="res://.godot/imported/DarkCase.png-7ebe37044d2f132dd64cafdb89160ee4.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Sprites/LightCase.png"
-dest_files=["res://.godot/imported/LightCase.png-9618f1bcd9acac692f9d5b306e728a61.ctex"]
+source_file="res://Assets/Sprites/Board/DarkCase.png"
+dest_files=["res://.godot/imported/DarkCase.png-7ebe37044d2f132dd64cafdb89160ee4.ctex"]
 
 [params]
 
