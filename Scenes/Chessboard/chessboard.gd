@@ -3,8 +3,8 @@ extends Node2D
 @export var board_size: int = 8
 @export var tile_size: int = 238
 
-@onready var light_texture = preload("res://Assets/Sprites/LightCase.png")
-@onready var dark_texture = preload("res://Assets/Sprites/DarkCase.png")
+@onready var light_texture = preload("res://Assets/Sprites/Board/LightCase.png")
+@onready var dark_texture = preload("res://Assets/Sprites/Board/DarkCase.png")
 
 func _ready():
 	generate_board()
@@ -34,7 +34,7 @@ func setup_camera():
 	cam.make_current()
 	# Centre approximatif de l'échiquier
 	cam.position = Vector2(
-		(board_size * tile_size) / 2,
-		(board_size * tile_size) / 2
+		(board_size * tile_size) / 2.0,
+		(board_size * tile_size) / 2.0
 	)
 	cam.zoom = Vector2(0.3, 0.3)
