@@ -1,6 +1,18 @@
 [gd_scene format=3 uid="uid://v3ikcunaw8t8"]
 
-[ext_resource type="Script" uid="uid://bk7qfpk17x5hr" path="res://Scenes/Pieces/piece.gd" id="1_rpsih"]
+[ext_resource type="Script" uid="uid://bk7qfpk17x5hr" path="res://Scenes/Pieces/Piece.gd" id="1_rpsih"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_rpsih"]
+size = Vector2(238, 238)
 
 [node name="Piece" type="Node2D" unique_id=212641511]
 script = ExtResource("1_rpsih")
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=1269015213]
+
+[node name="Area2D" type="Area2D" parent="." unique_id=866739691]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D" unique_id=794012915]
+shape = SubResource("RectangleShape2D_rpsih")
+
+[node name="HintLayer" type="Node2D" parent="." unique_id=270017454]

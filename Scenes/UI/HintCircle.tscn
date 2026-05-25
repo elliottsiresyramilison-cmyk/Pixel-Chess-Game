@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://dtajnjw0o8vig"]
+
+[ext_resource type="Script" uid="uid://bewiyj0webek8" path="res://Scenes/UI/hint_circle.gd" id="1_tdmn5"]
+
+[node name="Node2D" type="Node2D" unique_id=1112800267]
+script = ExtResource("1_tdmn5")

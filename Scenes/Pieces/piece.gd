@@ -11,11 +11,32 @@ var board_position : Vector2i = Vector2i.ZERO
 var is_selected    : bool     = false
 var has_moved      : bool     = false
 
-var _sprite        : Sprite2D
-var _hint_layer    : Node2D
-
-# Signal émis quand on clique sur la pièce
 signal piece_clicked(piece: Node2D)
+
+# ──────────────────────────────────────────────
+#  Références aux noeuds enfants (définis dans Piece.tscn)
+# ──────────────────────────────────────────────
+@onready var _sprite     : Sprite2D  = $Sprite2D
+@onready var _area       : Area2D    = $Area2D
+@onready var _hint_layer : Node2D    = $HintLayer
+
+# ──────────────────────────────────────────────
+#  Textures préchargées — plus de load() au runtime
+# ──────────────────────────────────────────────
+const TEXTURES : Dictionary = {
+	"w_Pawn":   preload("res://Assets/Sprites/Pieces/White/w_Pawn.png"),
+	"w_Rook":   preload("res://Assets/Sprites/Pieces/White/w_Rook.png"),
+	"w_Knight": preload("res://Assets/Sprites/Pieces/White/w_Knight.png"),
+	"w_Bishop": preload("res://Assets/Sprites/Pieces/White/w_Bishop.png"),
+	"w_Queen":  preload("res://Assets/Sprites/Pieces/White/w_Queen.png"),
+	"w_King":   preload("res://Assets/Sprites/Pieces/White/w_King.png"),
+	"b_Pawn":   preload("res://Assets/Sprites/Pieces/Black/b_Pawn.png"),
+	"b_Rook":   preload("res://Assets/Sprites/Pieces/Black/b_Rook.png"),
+	"b_Knight": preload("res://Assets/Sprites/Pieces/Black/b_Knight.png"),
+	"b_Bishop": preload("res://Assets/Sprites/Pieces/Black/b_Bishop.png"),
+	"b_Queen":  preload("res://Assets/Sprites/Pieces/Black/b_Queen.png"),
+	"b_King":   preload("res://Assets/Sprites/Pieces/Black/b_King.png"),
+}
 
 const TYPE_NAMES : Dictionary = {
 	PieceType.PAWN:   "Pawn",
@@ -26,50 +47,20 @@ const TYPE_NAMES : Dictionary = {
 	PieceType.KING:   "King",
 }
 
-func _get_texture_path() -> String:
-	var prefix : String = "w" if piece_color == PieceColor.WHITE else "b"
-	var folder : String = "White" if piece_color == PieceColor.WHITE else "Black"
-	@warning_ignore("shadowed_variable_base_class")
-	var name   : String = TYPE_NAMES[piece_type]
-	return "res://Assets/Sprites/Pieces/%s/%s_%s.png" % [folder, prefix, name]
+const HintCircle = preload("res://Scenes/UI/HintCircle.tscn")
 
 # ──────────────────────────────────────────────
 #  Initialisation
 # ──────────────────────────────────────────────
 func _ready() -> void:
-	_build_hint_layer()
+	_area.input_event.connect(_on_area_input)
 
-func _build_sprite() -> void:
-	if _sprite:
-		_sprite.queue_free()
-
-	_sprite = Sprite2D.new()
-	_sprite.texture  = load(_get_texture_path())
+func _apply_texture() -> void:
+	var key          : String = "%s_%s" % ["w" if piece_color == PieceColor.WHITE else "b", TYPE_NAMES[piece_type]]
+	_sprite.texture  = TEXTURES[key]
 	_sprite.centered = false
-
-	var tex_size : Vector2 = _sprite.texture.get_size()
-	_sprite.scale = Vector2(
-		float(tile_size) / tex_size.x,
-		float(tile_size) / tex_size.y
-	)
-
-	# Zone de clic via un Area2D + CollisionShape2D
-	var area  := Area2D.new()
-	var shape := CollisionShape2D.new()
-	var rect  := RectangleShape2D.new()
-	rect.size          = Vector2(tile_size, tile_size)
-	shape.shape        = rect
-	shape.position     = Vector2(tile_size / 2.0, tile_size / 2.0)
-	area.add_child(shape)
-	area.input_pickable = true
-	area.connect("input_event", _on_area_input)
-	add_child(area)
-	add_child(_sprite)
-
-func _build_hint_layer() -> void:
-	_hint_layer = Node2D.new()
-	_hint_layer.name = "HintLayer"
-	add_child(_hint_layer)
+	var tex_size     := _sprite.texture.get_size()
+	_sprite.scale    = Vector2(float(tile_size) / tex_size.x, float(tile_size) / tex_size.y)
 
 # ──────────────────────────────────────────────
 #  Détection du clic
@@ -81,13 +72,13 @@ func _on_area_input(_viewport: Node, event: InputEvent, _shape_idx: int) -> void
 			piece_clicked.emit(self)
 
 # ──────────────────────────────────────────────
-#  Setup public
+#  Setup public — appelé par Chessboard.gd
 # ──────────────────────────────────────────────
 func setup(type: PieceType, color: PieceColor, board_pos: Vector2i) -> void:
 	piece_type     = type
 	piece_color    = color
 	board_position = board_pos
-	_build_sprite()
+	_apply_texture()
 	_sync_visual_position()
 
 # ──────────────────────────────────────────────
@@ -99,7 +90,7 @@ func _sync_visual_position() -> void:
 
 func move_to(new_board_pos: Vector2i) -> void:
 	board_position = new_board_pos
-	has_moved = true
+	has_moved      = true
 	_sync_visual_position()
 
 # ──────────────────────────────────────────────
@@ -126,26 +117,13 @@ func _clear_hints() -> void:
 		child.queue_free()
 
 func _make_hint_circle(target_board_pos: Vector2i) -> Node2D:
-	var relative : Vector2 = Vector2(
+	var hint      := HintCircle.instantiate()
+	hint.position = Vector2(
 		(target_board_pos.x - board_position.x) * tile_size + tile_size / 2.0,
 		(target_board_pos.y - board_position.y) * tile_size + tile_size / 2.0
 	)
-	var hint := Node2D.new()
-	hint.position = relative
-	hint.set_script(_circle_draw_script(tile_size * 0.18, Color(0.0, 0.85, 0.2, 0.7)))
+	hint.radius   = tile_size * 0.18
 	return hint
-
-func _circle_draw_script(radius: float, color: Color) -> GDScript:
-	var src := GDScript.new()
-	src.source_code = """
-extends Node2D
-var _r : float = {r}
-var _c : Color  = Color({cr}, {cg}, {cb}, {ca})
-func _draw() -> void:
-	draw_circle(Vector2.ZERO, _r, _c)
-""".format({"r": radius, "cr": color.r, "cg": color.g, "cb": color.b, "ca": color.a})
-	src.reload()
-	return src
 
 # ──────────────────────────────────────────────
 #  Mouvements légaux
@@ -154,11 +132,15 @@ func get_valid_moves(board: Array) -> Array[Vector2i]:
 	var moves : Array[Vector2i] = []
 	match piece_type:
 		PieceType.PAWN:   moves = _pawn_moves(board)
-		PieceType.ROOK:   moves = _sliding_moves(board, [Vector2i(1,0), Vector2i(-1,0), Vector2i(0,1), Vector2i(0,-1)])
+		PieceType.ROOK:   moves = _sliding_moves(board, [Vector2i(1,0),  Vector2i(-1,0),
+														  Vector2i(0,1),  Vector2i(0,-1)])
 		PieceType.KNIGHT: moves = _knight_moves(board)
-		PieceType.BISHOP: moves = _sliding_moves(board, [Vector2i(1,1), Vector2i(-1,1), Vector2i(1,-1), Vector2i(-1,-1)])
-		PieceType.QUEEN:  moves = _sliding_moves(board, [Vector2i(1,0), Vector2i(-1,0), Vector2i(0,1), Vector2i(0,-1),
-														  Vector2i(1,1), Vector2i(-1,1), Vector2i(1,-1), Vector2i(-1,-1)])
+		PieceType.BISHOP: moves = _sliding_moves(board, [Vector2i(1,1),  Vector2i(-1,1),
+														  Vector2i(1,-1), Vector2i(-1,-1)])
+		PieceType.QUEEN:  moves = _sliding_moves(board, [Vector2i(1,0),  Vector2i(-1,0),
+														  Vector2i(0,1),  Vector2i(0,-1),
+														  Vector2i(1,1),  Vector2i(-1,1),
+														  Vector2i(1,-1), Vector2i(-1,-1)])
 		PieceType.KING:   moves = _king_moves(board)
 	return moves
 
@@ -209,8 +191,8 @@ func _sliding_moves(board: Array, directions: Array[Vector2i]) -> Array[Vector2i
 func _knight_moves(board: Array) -> Array[Vector2i]:
 	var moves : Array[Vector2i] = []
 	var jumps : Array[Vector2i] = [
-		Vector2i(2,1), Vector2i(2,-1), Vector2i(-2,1), Vector2i(-2,-1),
-		Vector2i(1,2), Vector2i(1,-2), Vector2i(-1,2), Vector2i(-1,-2)
+		Vector2i(2,1),  Vector2i(2,-1),  Vector2i(-2,1),  Vector2i(-2,-1),
+		Vector2i(1,2),  Vector2i(1,-2),  Vector2i(-1,2),  Vector2i(-1,-2)
 	]
 	for j in jumps:
 		var target := board_position + j
