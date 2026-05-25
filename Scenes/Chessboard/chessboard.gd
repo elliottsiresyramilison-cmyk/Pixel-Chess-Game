@@ -1,5 +1,4 @@
 extends Node2D
-class_name Piece
 
 const PieceScene  = preload("res://Scenes/Pieces/Piece.tscn")
 const PieceScript = preload("res://Scenes/Pieces/Piece.gd")
@@ -12,8 +11,11 @@ const PieceScript = preload("res://Scenes/Pieces/Piece.gd")
 @onready var _camera       : Camera2D = $Camera2D
 
 var board          : Array[Array]    = []
-var selected_piece : PieceScript     = null
+var selected_piece : Node2D          = null
 var valid_moves    : Array[Vector2i] = []
+
+# Mise en évidence du dernier coup
+var _last_move_overlays : Array[Node2D] = []
 
 func _ready() -> void:
 	_init_board()
@@ -58,6 +60,7 @@ func setup_camera() -> void:
 func spawn_piece(type: PieceScript.PieceType, color: PieceScript.PieceColor, board_pos: Vector2i) -> void:
 	var piece = PieceScene.instantiate()
 	add_child(piece)
+	piece.z_index = 2
 	piece.setup(type, color, board_pos)
 	board[board_pos.y][board_pos.x] = piece
 	piece.piece_clicked.connect(_on_piece_clicked)
@@ -66,20 +69,17 @@ func spawn_piece(type: PieceScript.PieceType, color: PieceScript.PieceColor, boa
 #  Clic sur une pièce
 # ──────────────────────────────────────────────
 func _on_piece_clicked(piece: Node2D) -> void:
-	# Capture si pièce ennemie dans les mouvements valides
 	if selected_piece != null and selected_piece != piece:
 		if piece.board_position in valid_moves:
 			_move_selected_to(piece.board_position)
 			return
 
-	# Désélection si on reclique sur la même pièce
 	if selected_piece == piece:
 		selected_piece.deselect()
 		selected_piece = null
 		valid_moves.clear()
 		return
 
-	# Nouvelle sélection
 	if selected_piece != null:
 		selected_piece.deselect()
 
@@ -109,18 +109,55 @@ func _input(event: InputEvent) -> void:
 #  Déplacement effectif
 # ──────────────────────────────────────────────
 func _move_selected_to(target: Vector2i) -> void:
+	var from : Vector2i = selected_piece.board_position
+
 	var occupant = board[target.y][target.x]
 	if occupant != null:
 		board[target.y][target.x] = null
 		occupant.queue_free()
 
-	board[selected_piece.board_position.y][selected_piece.board_position.x] = null
-	board[target.y][target.x] = selected_piece
+	board[from.y][from.x]       = null
+	board[target.y][target.x]   = selected_piece
 
 	selected_piece.deselect()
 	selected_piece.move_to(target)
+
+	# Mise en évidence du dernier coup
+	_highlight_last_move(from, target)
+
 	selected_piece = null
 	valid_moves.clear()
+
+# ──────────────────────────────────────────────
+#  Mise en évidence du dernier coup
+# ──────────────────────────────────────────────
+func _highlight_last_move(from: Vector2i, to: Vector2i) -> void:
+	# Supprime les overlays du coup précédent
+	for overlay in _last_move_overlays:
+		overlay.queue_free()
+	_last_move_overlays.clear()
+
+	# Crée un overlay pour la case de départ et la case d'arrivée
+	for cell in [from, to]:
+		var overlay := _make_move_overlay(cell)
+		add_child(overlay)
+		_last_move_overlays.append(overlay)
+
+func _make_move_overlay(cell: Vector2i) -> Node2D:
+	var overlay        := Node2D.new()
+	overlay.position   = Vector2(cell.x * tile_size, cell.y * tile_size)
+	overlay.z_index    = 0  # Au dessus des cases, en dessous des pièces
+
+	# Script de dessin inline — simple rectangle semi-transparent vert
+	var src            := GDScript.new()
+	src.source_code    = """
+extends Node2D
+func _draw() -> void:
+	draw_rect(Rect2(Vector2.ZERO, Vector2({s}, {s})), Color(0.2, 0.7, 0.2, 0.4))
+""".format({"s": tile_size})
+	src.reload()
+	overlay.set_script(src)
+	return overlay
 
 func _is_in_bounds(pos: Vector2i) -> bool:
 	return pos.x >= 0 and pos.x < board_size and pos.y >= 0 and pos.y < board_size

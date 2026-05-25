@@ -1,3 +1,4 @@
+# Piece.gd
 extends Node2D
 
 enum PieceType  { PAWN, ROOK, KNIGHT, BISHOP, QUEEN, KING }
