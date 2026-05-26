@@ -1,7 +1,8 @@
 extends Node2D
 
-const PieceScene  = preload("res://Scenes/Pieces/Piece.tscn")
-const PieceScript = preload("res://Scenes/Pieces/Piece.gd")
+const PieceScene       = preload("res://Scenes/Pieces/Piece.tscn")
+const PieceScript      = preload("res://Scenes/Pieces/Piece.gd")
+const MoveOverlayScene = preload("res://Scenes/UI/MoveOverlay.tscn")
 
 @export var board_size : int = 8
 @export var tile_size  : int = 238
@@ -10,22 +11,21 @@ const PieceScript = preload("res://Scenes/Pieces/Piece.gd")
 @onready var dark_texture  = preload("res://Assets/Sprites/Board/DarkCase.png")
 @onready var _camera       : Camera2D = $Camera2D
 
-var board          : Array[Array]    = []
-var selected_piece : Node2D          = null
-var valid_moves    : Array[Vector2i] = []
-
-# Mise en évidence du dernier coup
-var _last_move_overlays : Array[Node2D] = []
+var board               : Array[Array]    = []
+var selected_piece      : Node2D          = null
+var valid_moves         : Array[Vector2i] = []
+var _last_move_overlays : Array[Node2D]   = []
+var _check_overlay      : Node2D          = null
 
 func _ready() -> void:
 	_init_board()
 	generate_board()
 	setup_camera()
-	spawn_piece(PieceScript.PieceType.QUEEN, PieceScript.PieceColor.WHITE, Vector2i(3, 7))
+	spawn_all_pieces()
+	GameManager.check_detected.connect(_on_check_detected)
+	GameManager.checkmate_detected.connect(_on_checkmate_detected)
+	GameManager.stalemate_detected.connect(_on_stalemate_detected)
 
-# ──────────────────────────────────────────────
-#  Initialisation du tableau logique
-# ──────────────────────────────────────────────
 func _init_board() -> void:
 	board = []
 	for y in range(board_size):
@@ -33,9 +33,6 @@ func _init_board() -> void:
 		board[y].resize(board_size)
 		board[y].fill(null)
 
-# ──────────────────────────────────────────────
-#  Génération visuelle de l'échiquier
-# ──────────────────────────────────────────────
 func generate_board() -> void:
 	for y in range(board_size):
 		for x in range(board_size):
@@ -54,9 +51,19 @@ func setup_camera() -> void:
 	)
 	_camera.zoom = Vector2(0.3, 0.3)
 
-# ──────────────────────────────────────────────
-#  Spawn d'une pièce
-# ──────────────────────────────────────────────
+func spawn_all_pieces() -> void:
+	var T := PieceScript.PieceType
+	var C := PieceScript.PieceColor
+	var back_row : Array[PieceScript.PieceType] = [
+		T.ROOK, T.KNIGHT, T.BISHOP, T.QUEEN, T.KING, T.BISHOP, T.KNIGHT, T.ROOK
+	]
+	for x in range(8):
+		spawn_piece(back_row[x], C.BLACK, Vector2i(x, 0))
+		spawn_piece(T.PAWN,      C.BLACK, Vector2i(x, 1))
+	for x in range(8):
+		spawn_piece(back_row[x], C.WHITE, Vector2i(x, 7))
+		spawn_piece(T.PAWN,      C.WHITE, Vector2i(x, 6))
+
 func spawn_piece(type: PieceScript.PieceType, color: PieceScript.PieceColor, board_pos: Vector2i) -> void:
 	var piece = PieceScene.instantiate()
 	add_child(piece)
@@ -69,10 +76,15 @@ func spawn_piece(type: PieceScript.PieceType, color: PieceScript.PieceColor, boa
 #  Clic sur une pièce
 # ──────────────────────────────────────────────
 func _on_piece_clicked(piece: Node2D) -> void:
+	# Capture en priorité
 	if selected_piece != null and selected_piece != piece:
 		if piece.board_position in valid_moves:
 			_move_selected_to(piece.board_position)
 			return
+
+	# Vérification du tour pour la sélection
+	if not GameManager.is_turn(piece.piece_color):
+		return
 
 	if selected_piece == piece:
 		selected_piece.deselect()
@@ -84,11 +96,11 @@ func _on_piece_clicked(piece: Node2D) -> void:
 		selected_piece.deselect()
 
 	selected_piece = piece
-	valid_moves    = piece.get_valid_moves(board)
-	piece.select_piece(valid_moves)
+	valid_moves    = GameManager.get_valid_moves(board, piece)
+	piece.select_piece(valid_moves, board)
 
 # ──────────────────────────────────────────────
-#  Clic sur une case vide (destination)
+#  Clic sur une case vide
 # ──────────────────────────────────────────────
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
@@ -109,21 +121,37 @@ func _input(event: InputEvent) -> void:
 #  Déplacement effectif
 # ──────────────────────────────────────────────
 func _move_selected_to(target: Vector2i) -> void:
-	var from : Vector2i = selected_piece.board_position
+	var from    : Vector2i = selected_piece.board_position
+	var is_king : bool     = selected_piece.piece_type == PieceScript.PieceType.KING
+
+	GameManager.apply_en_passant(board, selected_piece, target)
+
+	if is_king:
+		GameManager.apply_castling(board, selected_piece, target)
 
 	var occupant = board[target.y][target.x]
 	if occupant != null:
 		board[target.y][target.x] = null
 		occupant.queue_free()
 
-	board[from.y][from.x]       = null
-	board[target.y][target.x]   = selected_piece
+	board[from.y][from.x]     = null
+	board[target.y][target.x] = selected_piece
 
 	selected_piece.deselect()
 	selected_piece.move_to(target)
-
-	# Mise en évidence du dernier coup
 	_highlight_last_move(from, target)
+
+	GameManager.update_en_passant(selected_piece, from, target)
+	GameManager.check_promotion(board, selected_piece)
+
+	var opponent : int = PieceScript.PieceColor.BLACK \
+		if selected_piece.piece_color == PieceScript.PieceColor.WHITE \
+		else PieceScript.PieceColor.WHITE
+
+	# ✅ On efface l'overlay rouge AVANT de vérifier le nouvel état
+	_clear_check_overlay()
+	GameManager.check_game_state(board, opponent)
+	GameManager.next_turn()
 
 	selected_piece = null
 	valid_moves.clear()
@@ -132,32 +160,49 @@ func _move_selected_to(target: Vector2i) -> void:
 #  Mise en évidence du dernier coup
 # ──────────────────────────────────────────────
 func _highlight_last_move(from: Vector2i, to: Vector2i) -> void:
-	# Supprime les overlays du coup précédent
 	for overlay in _last_move_overlays:
 		overlay.queue_free()
 	_last_move_overlays.clear()
-
-	# Crée un overlay pour la case de départ et la case d'arrivée
 	for cell in [from, to]:
-		var overlay := _make_move_overlay(cell)
+		var overlay       := MoveOverlayScene.instantiate()
+		overlay.position  = Vector2(cell.x * tile_size, cell.y * tile_size)
+		overlay.z_index   = 1
+		overlay.tile_size = tile_size
 		add_child(overlay)
 		_last_move_overlays.append(overlay)
 
-func _make_move_overlay(cell: Vector2i) -> Node2D:
-	var overlay        := Node2D.new()
-	overlay.position   = Vector2(cell.x * tile_size, cell.y * tile_size)
-	overlay.z_index    = 0  # Au dessus des cases, en dessous des pièces
+# ──────────────────────────────────────────────
+#  Overlay rouge — échec
+# ──────────────────────────────────────────────
+func _on_check_detected(color: int) -> void:
+	_clear_check_overlay()
+	for y in range(board_size):
+		for x in range(board_size):
+			var cell = board[y][x]
+			if cell != null \
+			and cell.piece_type  == PieceScript.PieceType.KING \
+			and cell.piece_color == color:
+				var overlay       := MoveOverlayScene.instantiate()
+				overlay.position  = Vector2(x * tile_size, y * tile_size)
+				overlay.z_index   = 1
+				overlay.tile_size = tile_size
+				overlay.color     = Color(0.9, 0.1, 0.1, 0.5)
+				add_child(overlay)
+				_check_overlay = overlay
+				return
 
-	# Script de dessin inline — simple rectangle semi-transparent vert
-	var src            := GDScript.new()
-	src.source_code    = """
-extends Node2D
-func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, Vector2({s}, {s})), Color(0.2, 0.7, 0.2, 0.4))
-""".format({"s": tile_size})
-	src.reload()
-	overlay.set_script(src)
-	return overlay
+func _clear_check_overlay() -> void:
+	if _check_overlay != null:
+		_check_overlay.queue_free()
+		_check_overlay = null
+
+func _on_checkmate_detected(color: int) -> void:
+	_on_check_detected(color)
+	print("Échec et mat ! Les %s ont perdu." % \
+		["Blancs" if color == PieceScript.PieceColor.WHITE else "Noirs"])
+
+func _on_stalemate_detected() -> void:
+	print("Pat ! Partie nulle.")
 
 func _is_in_bounds(pos: Vector2i) -> bool:
 	return pos.x >= 0 and pos.x < board_size and pos.y >= 0 and pos.y < board_size

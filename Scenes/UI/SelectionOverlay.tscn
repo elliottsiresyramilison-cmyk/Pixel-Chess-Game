@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://cjxd27lggmdqf"]
+
+[ext_resource type="Script" uid="uid://jgq1e2005ckh" path="res://Scenes/UI/SelectionOverlay.gd" id="1_s7esk"]
+
+[node name="SelectionOverlay" type="Node2D" unique_id=1667376613]
+script = ExtResource("1_s7esk")

@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://bdw5kidyehhrh"]
+
+[ext_resource type="Script" uid="uid://domhpllan4x46" path="res://Scenes/UI/MoveOverlay.gd" id="1_xo3uj"]
+
+[node name="MoveOverlay" type="Node2D" unique_id=1185914262]
+script = ExtResource("1_xo3uj")

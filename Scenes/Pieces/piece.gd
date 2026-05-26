@@ -1,4 +1,3 @@
-# Piece.gd
 extends Node2D
 
 enum PieceType  { PAWN, ROOK, KNIGHT, BISHOP, QUEEN, KING }
@@ -14,16 +13,10 @@ var has_moved      : bool     = false
 
 signal piece_clicked(piece: Node2D)
 
-# ──────────────────────────────────────────────
-#  Références aux noeuds enfants (définis dans Piece.tscn)
-# ──────────────────────────────────────────────
-@onready var _sprite     : Sprite2D  = $Sprite2D
-@onready var _area       : Area2D    = $Area2D
-@onready var _hint_layer : Node2D    = $HintLayer
+@onready var _sprite     : Sprite2D = $Sprite2D
+@onready var _area       : Area2D   = $Area2D
+@onready var _hint_layer : Node2D   = $HintLayer
 
-# ──────────────────────────────────────────────
-#  Textures préchargées — plus de load() au runtime
-# ──────────────────────────────────────────────
 const TEXTURES : Dictionary = {
 	"w_Pawn":   preload("res://Assets/Sprites/Pieces/White/w_Pawn.png"),
 	"w_Rook":   preload("res://Assets/Sprites/Pieces/White/w_Rook.png"),
@@ -48,7 +41,12 @@ const TYPE_NAMES : Dictionary = {
 	PieceType.KING:   "King",
 }
 
-const HintCircle = preload("res://Scenes/UI/HintCircle.tscn")
+const HintCircle        = preload("res://Scenes/UI/HintCircle.tscn")
+const MoveOverlayScene  = preload("res://Scenes/UI/MoveOverlay.tscn")
+const SelectionOverlay  = preload("res://Scenes/UI/SelectionOverlay.tscn")
+
+# overlay sombre sur la case de la pièce sélectionnée
+var _selection_overlay  : Node2D = null
 
 # ──────────────────────────────────────────────
 #  Initialisation
@@ -73,7 +71,7 @@ func _on_area_input(_viewport: Node, event: InputEvent, _shape_idx: int) -> void
 			piece_clicked.emit(self)
 
 # ──────────────────────────────────────────────
-#  Setup public — appelé par Chessboard.gd
+#  Setup public
 # ──────────────────────────────────────────────
 func setup(type: PieceType, color: PieceColor, board_pos: Vector2i) -> void:
 	piece_type     = type
@@ -92,26 +90,64 @@ func _sync_visual_position() -> void:
 func move_to(new_board_pos: Vector2i) -> void:
 	board_position = new_board_pos
 	has_moved      = true
-	_sync_visual_position()
+	var target_pos := Vector2(board_position.x * tile_size,
+							  board_position.y * tile_size)
+	var tween      := create_tween()
+	tween.set_ease(Tween.EASE_OUT)
+	tween.set_trans(Tween.TRANS_CUBIC)
+	tween.tween_property(self, "position", target_pos, 0.3)
 
 # ──────────────────────────────────────────────
 #  Sélection
 # ──────────────────────────────────────────────
-func select_piece(valid_moves: Array[Vector2i]) -> void:
+func select_piece(moves: Array[Vector2i], board: Array) -> void:
 	is_selected = true
-	_show_move_hints(valid_moves)
+	_show_selection_overlay()
+	_show_move_hints(moves, board)
 
 func deselect() -> void:
 	is_selected = false
+	_clear_selection_overlay()
 	_clear_hints()
 
 # ──────────────────────────────────────────────
-#  Cercles verts
+#  Overlay sombre sur la case sélectionnée
 # ──────────────────────────────────────────────
-func _show_move_hints(moves: Array[Vector2i]) -> void:
+func _show_selection_overlay() -> void:
+	_clear_selection_overlay()
+	_selection_overlay          = SelectionOverlay.instantiate()
+	_selection_overlay.z_index  = 1
+	_selection_overlay.tile_size = tile_size
+	add_child(_selection_overlay)
+
+func _clear_selection_overlay() -> void:
+	if _selection_overlay != null:
+		_selection_overlay.queue_free()
+		_selection_overlay = null
+
+# ──────────────────────────────────────────────
+#  Cercles et cases colorées
+# ──────────────────────────────────────────────
+func _show_move_hints(moves: Array[Vector2i], board: Array) -> void:
 	_clear_hints()
 	for move in moves:
-		_hint_layer.add_child(_make_hint_circle(move))
+		var hint_color : Color = GameManager.get_hint_color(board, move, self)
+		var is_capture : bool  = board[move.y][move.x] != null
+
+		if is_capture:
+			# Case occupée → overlay coloré (vert capture, rouge roi)
+			var overlay           := MoveOverlayScene.instantiate()
+			overlay.position      = Vector2(
+				(move.x - board_position.x) * tile_size,
+				(move.y - board_position.y) * tile_size
+			)
+			overlay.z_index       = 1
+			overlay.tile_size     = tile_size
+			overlay.color         = hint_color
+			_hint_layer.add_child(overlay)
+		else:
+			# Case vide → cercle vert classique
+			_hint_layer.add_child(_make_hint_circle(move))
 
 func _clear_hints() -> void:
 	for child in _hint_layer.get_children():
@@ -124,90 +160,5 @@ func _make_hint_circle(target_board_pos: Vector2i) -> Node2D:
 		(target_board_pos.y - board_position.y) * tile_size + tile_size / 2.0
 	)
 	hint.radius   = tile_size * 0.18
+	hint.color    = Color(0.0, 0.85, 0.2, 0.7)
 	return hint
-
-# ──────────────────────────────────────────────
-#  Mouvements légaux
-# ──────────────────────────────────────────────
-func get_valid_moves(board: Array) -> Array[Vector2i]:
-	var moves : Array[Vector2i] = []
-	match piece_type:
-		PieceType.PAWN:   moves = _pawn_moves(board)
-		PieceType.ROOK:   moves = _sliding_moves(board, [Vector2i(1,0),  Vector2i(-1,0),
-														  Vector2i(0,1),  Vector2i(0,-1)])
-		PieceType.KNIGHT: moves = _knight_moves(board)
-		PieceType.BISHOP: moves = _sliding_moves(board, [Vector2i(1,1),  Vector2i(-1,1),
-														  Vector2i(1,-1), Vector2i(-1,-1)])
-		PieceType.QUEEN:  moves = _sliding_moves(board, [Vector2i(1,0),  Vector2i(-1,0),
-														  Vector2i(0,1),  Vector2i(0,-1),
-														  Vector2i(1,1),  Vector2i(-1,1),
-														  Vector2i(1,-1), Vector2i(-1,-1)])
-		PieceType.KING:   moves = _king_moves(board)
-	return moves
-
-func _in_bounds(pos: Vector2i) -> bool:
-	return pos.x >= 0 and pos.x < 8 and pos.y >= 0 and pos.y < 8
-
-func _is_enemy(board: Array, pos: Vector2i) -> bool:
-	var cell = board[pos.y][pos.x]
-	return cell != null and cell.piece_color != piece_color
-
-func _is_empty(board: Array, pos: Vector2i) -> bool:
-	return board[pos.y][pos.x] == null
-
-func _pawn_moves(board: Array) -> Array[Vector2i]:
-	var moves     : Array[Vector2i] = []
-	var dir       : int = -1 if piece_color == PieceColor.WHITE else 1
-	var start_row : int =  6 if piece_color == PieceColor.WHITE else 1
-
-	var one_forward := Vector2i(board_position.x, board_position.y + dir)
-	if _in_bounds(one_forward) and _is_empty(board, one_forward):
-		moves.append(one_forward)
-		if board_position.y == start_row:
-			var two_forward := Vector2i(board_position.x, board_position.y + dir * 2)
-			if _is_empty(board, two_forward):
-				moves.append(two_forward)
-
-	for dx in [-1, 1]:
-		var cap := Vector2i(board_position.x + dx, board_position.y + dir)
-		if _in_bounds(cap) and _is_enemy(board, cap):
-			moves.append(cap)
-	return moves
-
-func _sliding_moves(board: Array, directions: Array[Vector2i]) -> Array[Vector2i]:
-	var moves : Array[Vector2i] = []
-	for d : Vector2i in directions:
-		var cur : Vector2i = board_position + d
-		while _in_bounds(cur):
-			if _is_empty(board, cur):
-				moves.append(cur)
-			elif _is_enemy(board, cur):
-				moves.append(cur)
-				break
-			else:
-				break
-			cur += d
-	return moves
-
-func _knight_moves(board: Array) -> Array[Vector2i]:
-	var moves : Array[Vector2i] = []
-	var jumps : Array[Vector2i] = [
-		Vector2i(2,1),  Vector2i(2,-1),  Vector2i(-2,1),  Vector2i(-2,-1),
-		Vector2i(1,2),  Vector2i(1,-2),  Vector2i(-1,2),  Vector2i(-1,-2)
-	]
-	for j in jumps:
-		var target := board_position + j
-		if _in_bounds(target) and (_is_empty(board, target) or _is_enemy(board, target)):
-			moves.append(target)
-	return moves
-
-func _king_moves(board: Array) -> Array[Vector2i]:
-	var moves : Array[Vector2i] = []
-	for dy in [-1, 0, 1]:
-		for dx in [-1, 0, 1]:
-			if dx == 0 and dy == 0:
-				continue
-			var target := board_position + Vector2i(dx, dy)
-			if _in_bounds(target) and (_is_empty(board, target) or _is_enemy(board, target)):
-				moves.append(target)
-	return moves
