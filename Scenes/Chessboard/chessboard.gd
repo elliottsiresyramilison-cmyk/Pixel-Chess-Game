@@ -1,3 +1,4 @@
+# Chessboard.gd
 extends Node2D
 
 const PieceScene       = preload("res://Scenes/Pieces/Piece.tscn")
@@ -111,7 +112,8 @@ func _input(event: InputEvent) -> void:
 			var board_pos : Vector2i = Vector2i(
 				int(world_pos.x / tile_size),
 				int(world_pos.y / tile_size)
-			)
+				)
+				
 			if _is_in_bounds(board_pos) and board_pos in valid_moves:
 				if board[board_pos.y][board_pos.x] == null:
 					_move_selected_to(board_pos)

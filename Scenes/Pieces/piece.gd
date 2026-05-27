@@ -1,3 +1,4 @@
+# Piece.gd
 extends Node2D
 
 enum PieceType  { PAWN, ROOK, KNIGHT, BISHOP, QUEEN, KING }
@@ -95,7 +96,7 @@ func move_to(new_board_pos: Vector2i) -> void:
 	var tween      := create_tween()
 	tween.set_ease(Tween.EASE_OUT)
 	tween.set_trans(Tween.TRANS_CUBIC)
-	tween.tween_property(self, "position", target_pos, 0.3)
+	tween.tween_property(self, "position", target_pos, 0.1)
 
 # ──────────────────────────────────────────────
 #  Sélection

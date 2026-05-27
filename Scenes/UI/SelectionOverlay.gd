@@ -1,3 +1,4 @@
+# SelectionOverlay.gd
 extends Node2D
 
 var tile_size : int   = 238

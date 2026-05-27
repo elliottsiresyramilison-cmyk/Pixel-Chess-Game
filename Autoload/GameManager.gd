@@ -237,6 +237,7 @@ func _king_moves(board: Array, piece) -> Array[Vector2i]:
 func _castling_moves(board: Array, king) -> Array[Vector2i]:
 	var moves : Array[Vector2i] = []
 	var color : int      = king.piece_color
+	@warning_ignore("unused_variable")
 	var pos   : Vector2i = king.board_position
 
 	if king.has_moved or is_in_check(board, color):
@@ -300,6 +301,7 @@ func apply_en_passant(board: Array, piece, target: Vector2i) -> void:
 # ──────────────────────────────────────────────
 #  Promotion
 # ──────────────────────────────────────────────
+@warning_ignore("unused_parameter")
 func check_promotion(board: Array, piece) -> void:
 	if piece.piece_type != PieceScript.PieceType.PAWN:
 		return

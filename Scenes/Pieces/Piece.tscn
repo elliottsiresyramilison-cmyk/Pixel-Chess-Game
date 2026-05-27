@@ -13,6 +13,7 @@ script = ExtResource("1_rpsih")
 [node name="Area2D" type="Area2D" parent="." unique_id=866739691]
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D" unique_id=794012915]
+position = Vector2(119, 119)
 shape = SubResource("RectangleShape2D_rpsih")
 
 [node name="HintLayer" type="Node2D" parent="." unique_id=270017454]
