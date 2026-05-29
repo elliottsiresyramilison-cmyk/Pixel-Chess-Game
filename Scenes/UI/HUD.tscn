@@ -1,0 +1,65 @@
+[gd_scene format=3 uid="uid://dyyuveel3andr"]
+
+[ext_resource type="Script" uid="uid://di8xn6yslugsl" path="res://Scenes/UI/HUD.gd" id="1_omqfp"]
+
+[node name="HUD" type="CanvasLayer" unique_id=1528994248]
+script = ExtResource("1_omqfp")
+
+[node name="RootUI" type="Control" parent="." unique_id=1152837693]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 1152.0
+offset_bottom = 648.0
+mouse_filter = 2
+
+[node name="Timer" type="Timer" parent="RootUI" unique_id=391418902]
+
+[node name="TimerBlack" type="Label" parent="RootUI/Timer" unique_id=441156820]
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="TimerWhite" type="Label" parent="RootUI/Timer" unique_id=2092461392]
+offset_top = 24.0
+offset_right = 40.0
+offset_bottom = 47.0
+
+[node name="MoveHistory" type="VBoxContainer" parent="RootUI" unique_id=196006280]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="Historique" type="Label" parent="RootUI/MoveHistory" unique_id=964740447]
+layout_mode = 2
+
+[node name="ScrollContainer" type="ScrollContainer" parent="RootUI/MoveHistory" unique_id=752347113]
+layout_mode = 2
+
+[node name="MoveList" type="VBoxContainer" parent="RootUI/MoveHistory/ScrollContainer" unique_id=345506305]
+layout_mode = 2
+
+[node name="CapturedPieces" type="VBoxContainer" parent="RootUI" unique_id=988118029]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="CapturedBlack" type="HBoxContainer" parent="RootUI/CapturedPieces" unique_id=1489141033]
+layout_mode = 2
+
+[node name="CapturedWhite" type="HBoxContainer" parent="RootUI/CapturedPieces" unique_id=1249141153]
+layout_mode = 2
+
+[node name="MaterialAdvantage" type="VBoxContainer" parent="RootUI" unique_id=165120235]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="AdvantageBlack" type="HBoxContainer" parent="RootUI/MaterialAdvantage" unique_id=73358151]
+layout_mode = 2
+
+[node name="AdvantageWhite" type="HBoxContainer" parent="RootUI/MaterialAdvantage" unique_id=1945523412]
+layout_mode = 2
+
+[node name="Buttons" type="HBoxContainer" parent="RootUI" unique_id=1751283516]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0

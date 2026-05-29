@@ -1,4 +1,3 @@
-# GameManager.gd
 extends Node
 
 const PieceScript = preload("res://Scenes/Pieces/Piece.gd")
@@ -11,13 +10,16 @@ signal check_detected(color)
 signal checkmate_detected(color)
 signal stalemate_detected()
 signal promotion_needed(pawn)
+signal move_made(record)
+signal move_undone()
 
 # ──────────────────────────────────────────────
 #  État de la partie
 # ──────────────────────────────────────────────
-var current_turn      : int     = PieceScript.PieceColor.WHITE
+var current_turn      : int      = PieceScript.PieceColor.WHITE
 var en_passant_target : Vector2i = Vector2i(-1, -1)
-var is_game_over      : bool    = false
+var is_game_over      : bool     = false
+var move_history      : Array    = []
 
 # ──────────────────────────────────────────────
 #  Gestion du tour
@@ -46,6 +48,83 @@ func is_enemy(board: Array, pos: Vector2i, color: int) -> bool:
 func is_ally(board: Array, pos: Vector2i, color: int) -> bool:
 	var cell = board[pos.y][pos.x]
 	return cell != null and cell.piece_color == color
+
+# ──────────────────────────────────────────────
+#  Enregistrement d'un coup
+# ──────────────────────────────────────────────
+func record_move(
+	piece          : Node2D,
+	from           : Vector2i,
+	to             : Vector2i,
+	captured       : Node2D,
+	captured_pos   : Vector2i,
+	is_castling    : bool,
+	rook           : Node2D,
+	rook_from      : Vector2i,
+	rook_to        : Vector2i,
+	is_en_passant  : bool,
+	is_promotion   : bool
+) -> MoveRecord:
+	var record := MoveRecord.new(
+		piece, from, to,
+		captured, captured_pos,
+		piece.has_moved,
+		is_castling, rook, rook_from, rook_to,
+		rook.has_moved if rook != null else false,
+		is_en_passant,
+		is_promotion,
+		PieceScript.PieceType.PAWN,
+		en_passant_target
+	)
+	move_history.append(record)
+	move_made.emit(record)
+	return record
+
+# ──────────────────────────────────────────────
+#  Annulation d'un coup
+# ──────────────────────────────────────────────
+func undo_move(board: Array) -> void:
+	if move_history.is_empty():
+		return
+
+	var record : MoveRecord = move_history.pop_back()
+
+	# Restaure la pièce à sa position initiale
+	board[record.to.y][record.to.x]     = null
+	board[record.from.y][record.from.x] = record.piece
+	record.piece.board_position         = record.from
+	record.piece.has_moved              = record.was_first_move
+	record.piece._sync_visual_position()
+
+	# Restaure la pièce capturée si elle existe
+	if record.captured_piece != null:
+		board[record.captured_pos.y][record.captured_pos.x] = record.captured_piece
+		record.captured_piece.board_position                 = record.captured_pos
+		record.captured_piece._sync_visual_position()
+		record.captured_piece.show()
+
+	# Restaure la tour si c'était un roque
+	if record.is_castling and record.castling_rook != null:
+		board[record.rook_to.y][record.rook_to.x]     = null
+		board[record.rook_from.y][record.rook_from.x] = record.castling_rook
+		record.castling_rook.board_position            = record.rook_from
+		record.castling_rook.has_moved                 = record.rook_was_first_move
+		record.castling_rook._sync_visual_position()
+
+	# Restaure la promotion
+	if record.is_promotion:
+		record.piece.piece_type = record.promotion_type_before
+		record.piece._apply_texture()
+
+	# Restaure l'en passant
+	en_passant_target = record.prev_en_passant_target
+
+	# Retour au tour précédent
+	current_turn = PieceScript.PieceColor.BLACK if current_turn == PieceScript.PieceColor.WHITE \
+				 else PieceScript.PieceColor.WHITE
+	is_game_over = false
+
+	move_undone.emit()
 
 # ──────────────────────────────────────────────
 #  Calcul des mouvements bruts
@@ -80,13 +159,10 @@ func get_valid_moves(board: Array, piece) -> Array[Vector2i]:
 		legal.append_array(_castling_moves(board, piece))
 	return legal
 
-# ──────────────────────────────────────────────
-#  Simulation — le mouvement laisse-t-il le roi en échec ?
-# ──────────────────────────────────────────────
 func _move_leaves_king_in_check(board: Array, piece, target: Vector2i) -> bool:
-	var sim       := _copy_board(board)
-	var from_pos  : Vector2i = piece.board_position
-	sim[target.y][target.x]    = sim[from_pos.y][from_pos.x]
+	var sim      := _copy_board(board)
+	var from_pos : Vector2i = piece.board_position
+	sim[target.y][target.x]     = sim[from_pos.y][from_pos.x]
 	sim[from_pos.y][from_pos.x] = null
 	return is_in_check(sim, piece.piece_color as int)
 
@@ -161,7 +237,7 @@ func check_game_state(board: Array, color: int) -> void:
 # ──────────────────────────────────────────────
 func _pawn_moves(board: Array, piece) -> Array[Vector2i]:
 	var moves     : Array[Vector2i] = []
-	var color     : int     = piece.piece_color
+	var color     : int      = piece.piece_color
 	var pos       : Vector2i = piece.board_position
 	var dir       : int = -1 if color == PieceScript.PieceColor.WHITE else 1
 	var start_row : int =  6 if color == PieceScript.PieceColor.WHITE else 1
@@ -237,14 +313,9 @@ func _king_moves(board: Array, piece) -> Array[Vector2i]:
 func _castling_moves(board: Array, king) -> Array[Vector2i]:
 	var moves : Array[Vector2i] = []
 	var color : int      = king.piece_color
-	@warning_ignore("unused_variable")
-	var pos   : Vector2i = king.board_position
-
 	if king.has_moved or is_in_check(board, color):
 		return moves
-
 	var row : int = 7 if color == PieceScript.PieceColor.WHITE else 0
-
 	var rook_k = board[row][7]
 	if rook_k != null and rook_k.piece_type == PieceScript.PieceType.ROOK \
 	and not rook_k.has_moved:
@@ -252,7 +323,6 @@ func _castling_moves(board: Array, king) -> Array[Vector2i]:
 			if not _is_square_attacked(board, Vector2i(5, row), color) \
 			and not _is_square_attacked(board, Vector2i(6, row), color):
 				moves.append(Vector2i(6, row))
-
 	var rook_q = board[row][0]
 	if rook_q != null and rook_q.piece_type == PieceScript.PieceType.ROOK \
 	and not rook_q.has_moved:
@@ -261,21 +331,28 @@ func _castling_moves(board: Array, king) -> Array[Vector2i]:
 			if not _is_square_attacked(board, Vector2i(3, row), color) \
 			and not _is_square_attacked(board, Vector2i(2, row), color):
 				moves.append(Vector2i(2, row))
-
 	return moves
 
-func apply_castling(board: Array, king, target: Vector2i) -> void:
-	var row : int = king.board_position.y
+func apply_castling(board: Array, king, target: Vector2i) -> Array:
+	# Retourne [rook, rook_from, rook_to] pour MoveRecord
+	var row   : int = king.board_position.y
 	if target.x == 6:
-		var rook = board[row][7]
+		var rook     = board[row][7]
+		var rook_from : Vector2i = Vector2i(7, row)
+		var rook_to   : Vector2i = Vector2i(5, row)
 		board[row][7] = null
 		board[row][5] = rook
-		rook.move_to(Vector2i(5, row))
+		rook.move_to(rook_to)
+		return [rook, rook_from, rook_to]
 	elif target.x == 2:
-		var rook = board[row][0]
+		var rook      = board[row][0]
+		var rook_from : Vector2i = Vector2i(0, row)
+		var rook_to   : Vector2i = Vector2i(3, row)
 		board[row][0] = null
 		board[row][3] = rook
-		rook.move_to(Vector2i(3, row))
+		rook.move_to(rook_to)
+		return [rook, rook_from, rook_to]
+	return [null, Vector2i(-1,-1), Vector2i(-1,-1)]
 
 # ──────────────────────────────────────────────
 #  En passant
@@ -287,21 +364,22 @@ func update_en_passant(piece, from: Vector2i, to: Vector2i) -> void:
 	else:
 		en_passant_target = Vector2i(-1, -1)
 
-func apply_en_passant(board: Array, piece, target: Vector2i) -> void:
+func apply_en_passant(board: Array, piece, target: Vector2i) -> Node2D:
+	# Retourne le pion capturé (ou null) pour MoveRecord
 	if piece.piece_type != PieceScript.PieceType.PAWN:
-		return
+		return null
 	if target != en_passant_target:
-		return
+		return null
 	var captured_pos : Vector2i = Vector2i(target.x, piece.board_position.y)
-	var captured     = board[captured_pos.y][captured_pos.x]
+	var captured     : Node2D   = board[captured_pos.y][captured_pos.x]
 	if captured != null:
 		board[captured_pos.y][captured_pos.x] = null
-		captured.queue_free()
+		captured.hide()
+	return captured
 
 # ──────────────────────────────────────────────
 #  Promotion
 # ──────────────────────────────────────────────
-@warning_ignore("unused_parameter")
 func check_promotion(board: Array, piece) -> void:
 	if piece.piece_type != PieceScript.PieceType.PAWN:
 		return
@@ -332,3 +410,4 @@ func reset() -> void:
 	current_turn      = PieceScript.PieceColor.WHITE
 	en_passant_target = Vector2i(-1, -1)
 	is_game_over      = false
+	move_history.clear()

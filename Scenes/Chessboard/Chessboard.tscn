@@ -1,8 +1,13 @@
 [gd_scene format=3 uid="uid://cev2x25ethn1a"]
 
 [ext_resource type="Script" uid="uid://5a6sno4o6g8u" path="res://Scenes/Chessboard/Chessboard.gd" id="1_rfc21"]
+[ext_resource type="PackedScene" uid="uid://dyyuveel3andr" path="res://Scenes/UI/HUD.tscn" id="2_vegdl"]
 
 [node name="Chessboard" type="Node2D" unique_id=785547159]
 script = ExtResource("1_rfc21")
 
 [node name="Camera2D" type="Camera2D" parent="." unique_id=533566223]
+
+[node name="HUD" parent="." unique_id=1528994248 instance=ExtResource("2_vegdl")]
+scale = Vector2(0.9, 1)
+transform = Transform2D(0.9, 0, 0, 1, 0, 0)
